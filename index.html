@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Object Detection API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #fafafa;
+        }
+        .upload-section:hover {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 100%;
+            max-width: 300px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .detection-item {
+            background-color: white;
+            margin: 10px 0;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            border-radius: 5px;
+        }
+        .confidence {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .coordinates {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 5px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .api-info {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .endpoint {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 5px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 YOLO Object Detection API</h1>
+        
+        <div class="api-info">
+            <h3>API Endpoints:</h3>
+            <p><strong>Health Check:</strong> <span class="endpoint">GET /api/yolo/health</span></p>
+            <p><strong>Analyze Image:</strong> <span class="endpoint">POST /api/yolo/analyze</span></p>
+            <p><strong>Get Classes:</strong> <span class="endpoint">GET /api/yolo/classes</span></p>
+        </div>
+
+        <div class="upload-section">
+            <h3>📤 Upload Image for Analysis</h3>
+            <p>Select an image file to detect objects using YOLOv5</p>
+            <input type="file" id="imageInput" accept="image/*">
+            <br>
+            <button onclick="analyzeImage()">🔍 Analyze Image</button>
+            <button onclick="checkHealth()">❤️ Check API Health</button>
+            <button onclick="getClasses()">📋 Get Classes</button>
+        </div>
+
+        <div id="imagePreview"></div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/yolo';
+
+        function showResults(content, isError = false) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = content;
+            resultsDiv.className = `results ${isError ? 'error' : 'success'}`;
+        }
+
+        function showLoading(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="loading">⏳ ${message}</div>`;
+            resultsDiv.className = 'results';
+        }
+
+        async function checkHealth() {
+            showLoading('Checking API health...');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResults(`
+                        <h3>✅ API Health Status</h3>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Model Loaded:</strong> ${data.model_loaded ? '✅ Yes' : '❌ No'}</p>
+                        <p><strong>Message:</strong> ${data.message}</p>
+                    `);
+                } else {
+                    showResults(`<h3>❌ Health Check Failed</h3><p>${data.error || 'Unknown error'}</p>`, true);
+                }
+            } catch (error) {
+                showResults(`<h3>❌ Network Error</h3><p>${error.message}</p>`, true);
+            }
+        }
+
+        async function getClasses() {
+            showLoading('Fetching available classes...');
+            try {
+                const response = await fetch(`${API_BASE}/classes`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const classesHtml = data.classes.map((cls, index) => 
+                        `<span style="background-color: #e9ecef; padding: 3px 8px; border-radius: 3px; margin: 2px; display: inline-block;">${index}: ${cls}</span>`
+                    ).join('');
+                    
+                    showResults(`
+                        <h3>📋 Available Classes (${data.total_classes} total)</h3>
+                        <div style="line-height: 2;">${classesHtml}</div>
+                    `);
+                } else {
+                    showResults(`<h3>❌ Failed to Get Classes</h3><p>${data.error || 'Unknown error'}</p>`, true);
+                }
+            } catch (error) {
+                showResults(`<h3>❌ Network Error</h3><p>${error.message}</p>`, true);
+            }
+        }
+
+        async function analyzeImage() {
+            const fileInput = document.getElementById('imageInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResults('<h3>❌ No Image Selected</h3><p>Please select an image file first.</p>', true);
+                return;
+            }
+
+            // Show image preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('imagePreview').innerHTML = `
+                    <h3>📷 Selected Image:</h3>
+                    <img src="${e.target.result}" alt="Selected image" class="image-preview">
+                `;
+            };
+            reader.readAsDataURL(file);
+
+            showLoading('Analyzing image with YOLO...');
+
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch(`${API_BASE}/analyze`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.detection_count === 0) {
+                        showResults(`
+                            <h3>🔍 Analysis Complete</h3>
+                            <p><strong>Image:</strong> ${data.image_name}</p>
+                            <p><strong>Dimensions:</strong> ${data.image_dimensions.width} × ${data.image_dimensions.height}</p>
+                            <p><strong>Detections:</strong> No objects detected</p>
+                        `);
+                    } else {
+                        const detectionsHtml = data.detections.map(detection => `
+                            <div class="detection-item">
+                                <h4>🎯 ${detection.class_name}</h4>
+                                <p><strong>Confidence:</strong> <span class="confidence">${(detection.confidence * 100).toFixed(1)}%</span></p>
+                                <p><strong>Bounding Box:</strong></p>
+                                <div class="coordinates">
+                                    Top-left: (${detection.box_2d.x_min}, ${detection.box_2d.y_min})<br>
+                                    Bottom-right: (${detection.box_2d.x_max}, ${detection.box_2d.y_max})<br>
+                                    Size: ${detection.box_2d.x_max - detection.box_2d.x_min} × ${detection.box_2d.y_max - detection.box_2d.y_min}
+                                </div>
+                            </div>
+                        `).join('');
+
+                        showResults(`
+                            <h3>🎉 Analysis Complete</h3>
+                            <p><strong>Image:</strong> ${data.image_name}</p>
+                            <p><strong>Dimensions:</strong> ${data.image_dimensions.width} × ${data.image_dimensions.height}</p>
+                            <p><strong>Objects Found:</strong> ${data.detection_count}</p>
+                            <div>${detectionsHtml}</div>
+                        `);
+                    }
+                } else {
+                    showResults(`<h3>❌ Analysis Failed</h3><p>${data.error || 'Unknown error'}</p>`, true);
+                }
+            } catch (error) {
+                showResults(`<h3>❌ Network Error</h3><p>${error.message}</p>`, true);
+            }
+        }
+
+        // Check API health on page load
+        window.onload = function() {
+            checkHealth();
+        };
+    </script>
+</body>
+</html>
+
